@@ -17,9 +17,7 @@ st.markdown(hide_st_style, unsafe_allow_html=True)
 # Database connection function
 def get_db_connection():
     try:
-        # SQLite3 database file
         conn = sqlite3.connect("personal_library.db")
-        st.write("✅ Successfully connected to SQLite database")
         return conn
     except sqlite3.Error as e:
         st.error(f"❌ Error connecting to SQLite: {e}")
@@ -56,19 +54,20 @@ def add_book(title, author, year, genre, read_status):
     conn = get_db_connection()
     if conn:
         try:
-            cursor = conn.cursor()
-            query = "INSERT INTO books (title, author, year, genre, read_status) VALUES (?, ?, ?, ?, ?)"
-            values = (title, author, year, genre, int(read_status))
-            cursor.execute(query, values)
-            conn.commit()
-            st.write(f"✅ Added book: {title}")
+            with conn:  # Auto-commit aur close
+                cursor = conn.cursor()
+                query = "INSERT INTO books (title, author, year, genre, read_status) VALUES (?, ?, ?, ?, ?)"
+                values = (title, author, year, genre, int(read_status))
+                cursor.execute(query, values)
+                # Debugging: Check rows affected aur total count
+                st.write(f"✅ Added book: {title}, Rows affected: {cursor.rowcount}")
+                cursor.execute("SELECT COUNT(*) FROM books")
+                total_books = cursor.fetchone()[0]
+                st.write(f"📚 Total books in database: {total_books}")
             return True
         except sqlite3.Error as e:
             st.error(f"❌ Error adding book: {e}")
             return False
-        finally:
-            cursor.close()
-            conn.close()
     return False
 
 # Remove book from database
@@ -76,18 +75,15 @@ def remove_book(title):
     conn = get_db_connection()
     if conn:
         try:
-            cursor = conn.cursor()
-            query = "DELETE FROM books WHERE title = ?"
-            cursor.execute(query, (title,))
-            conn.commit()
-            st.write(f"✅ Removed book: {title}")
+            with conn:
+                cursor = conn.cursor()
+                query = "DELETE FROM books WHERE title = ?"
+                cursor.execute(query, (title,))
+                st.write(f"✅ Removed book: {title}")
             return True
         except sqlite3.Error as e:
             st.error(f"❌ Error removing book: {e}")
             return False
-        finally:
-            cursor.close()
-            conn.close()
     return False
 
 # Search books
@@ -95,20 +91,18 @@ def search_books(search_by, value):
     conn = get_db_connection()
     if conn:
         try:
-            cursor = conn.cursor()
-            if search_by == "Title":
-                query = "SELECT * FROM books WHERE title LIKE ?"
-            else:
-                query = "SELECT * FROM books WHERE author LIKE ?"
-            cursor.execute(query, (f"%{value}%",))
-            results = cursor.fetchall()
+            with conn:
+                cursor = conn.cursor()
+                if search_by == "Title":
+                    query = "SELECT * FROM books WHERE title LIKE ?"
+                else:
+                    query = "SELECT * FROM books WHERE author LIKE ?"
+                cursor.execute(query, (f"%{value}%",))
+                results = cursor.fetchall()
             return results
         except sqlite3.Error as e:
             st.error(f"❌ Error searching books: {e}")
             return []
-        finally:
-            cursor.close()
-            conn.close()
     return []
 
 # Get all books
@@ -116,16 +110,14 @@ def get_all_books():
     conn = get_db_connection()
     if conn:
         try:
-            cursor = conn.cursor()
-            cursor.execute("SELECT * FROM books")
-            results = cursor.fetchall()
+            with conn:
+                cursor = conn.cursor()
+                cursor.execute("SELECT * FROM books")
+                results = cursor.fetchall()
             return results
         except sqlite3.Error as e:
             st.error(f"❌ Error fetching books: {e}")
             return []
-        finally:
-            cursor.close()
-            conn.close()
     return []
 
 # Get statistics
@@ -133,21 +125,19 @@ def get_statistics():
     conn = get_db_connection()
     if conn:
         try:
-            cursor = conn.cursor()
-            cursor.execute("SELECT COUNT(*) FROM books")
-            total = cursor.fetchone()[0]
-            cursor.execute("SELECT COUNT(*) FROM books WHERE read_status = 1")
-            read = cursor.fetchone()[0]
+            with conn:
+                cursor = conn.cursor()
+                cursor.execute("SELECT COUNT(*) FROM books")
+                total = cursor.fetchone()[0]
+                cursor.execute("SELECT COUNT(*) FROM books WHERE read_status = 1")
+                read = cursor.fetchone()[0]
             return total, read
         except sqlite3.Error as e:
             st.error(f"❌ Error fetching statistics: {e}")
             return 0, 0
-        finally:
-            cursor.close()
-            conn.close()
     return 0, 0
 
-# Function to add background image (unchanged)
+# Function to add background image
 def add_bg_from_local(image_file):
     if os.path.exists(image_file):
         try:
@@ -179,8 +169,11 @@ def add_bg_from_local(image_file):
 
 # Streamlit UI
 def main():
-    with st.spinner("Initializing database..."):
-        init_db()
+    # Database ko sirf ek baar initialize karo
+    if 'db_initialized' not in st.session_state:
+        with st.spinner("Initializing database..."):
+            init_db()
+        st.session_state.db_initialized = True
 
     st.markdown(
         """
@@ -193,7 +186,7 @@ def main():
         unsafe_allow_html=True
     )
 
-    # Custom CSS (unchanged)
+    # Custom CSS
     st.markdown("""
         <style>
         .main {
